@@ -1,5 +1,11 @@
-const express = require('express')
+const express = require('express');
+var path = require('path');
+var coords = [];
+var descs = [];
 const app = express()
+app.set('view engine', 'html');
+app.engine('html', require('ejs').renderFile);
+app.use(express.static(path.join(__dirname, 'public')));
 const port = 3000
 const SparqlClient = require('sparql-http-client')
 const endpointUrl = 'https://dbpedia.org/sparql/'
@@ -14,18 +20,24 @@ const query = `
       ?subject skos:broader dbc:Mausoleums_by_country .
       ?maqam dct:subject ?subject .
       ?maqam dbp:religiousAffiliation dbr:Islam .
-      ?maqam georss:point ?position
+      ?maqam georss:point ?position .
+      ?maqam dbo:abstract ?desc
+      
+      FILTER(lang(?desc) = 'fr')
     }`;
 
 const client = new SparqlClient({ endpointUrl });
 
 (async function main() {
   const stream = await client.query.select(query);
-
   stream.on('data', row => {
     Object.entries(row).forEach(([key, value]) => {
-      console.log(`${key}: ${value.value} (${value.termType})`)
-    })
+      if (key === 'position') {
+        coords.push(value.value.replace(' ', ','));
+      } else if (key == 'desc') {
+        descs.push(value.value);
+      }
+    });
   })
 
   stream.on('error', err => {
@@ -35,7 +47,15 @@ const client = new SparqlClient({ endpointUrl });
 })();
 
 app.get('/', (req, res) => {
+  res.render('./index.html');
+})
 
+app.get('/coord', (req, res) => {
+  res.send(JSON.stringify(coords));
+})
+
+app.get('/desc', (req, res) => {
+  res.send(JSON.stringify(descs));
 })
 
 app.listen(port, () => {
